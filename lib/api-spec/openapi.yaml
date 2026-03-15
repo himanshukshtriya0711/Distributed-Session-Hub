@@ -1,15 +1,18 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Distributed Session Management API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: session
+    description: Session operations
 paths:
   /healthz:
     get:
@@ -24,6 +27,76 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      description: Create a session for the user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout
+      description: Destroy the current session
+      responses:
+        "200":
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+  /session/info:
+    get:
+      operationId: getSessionInfo
+      tags: [session]
+      summary: Get session info
+      description: Returns current session data and which server is handling the request
+      responses:
+        "200":
+          description: Session info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionInfo"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /session/nodes:
+    get:
+      operationId: getNodeStatus
+      tags: [session]
+      summary: Get backend node status
+      description: Returns status of all backend nodes
+      responses:
+        "200":
+          description: Node status list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeStatusResponse"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +106,106 @@ components:
           type: string
       required:
         - status
-
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+      required:
+        - username
+        - password
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        username:
+          type: string
+        sessionId:
+          type: string
+        nodeId:
+          type: string
+        message:
+          type: string
+      required:
+        - success
+        - username
+        - sessionId
+        - nodeId
+        - message
+    SessionInfo:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+        username:
+          type: string
+        sessionId:
+          type: string
+        nodeId:
+          type: string
+        nodePort:
+          type: number
+        loginTime:
+          type: string
+        requestCount:
+          type: number
+      required:
+        - authenticated
+        - username
+        - sessionId
+        - nodeId
+        - nodePort
+        - loginTime
+        - requestCount
+    NodeStatusResponse:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeStatus"
+        currentNode:
+          type: string
+      required:
+        - nodes
+        - currentNode
+    NodeStatus:
+      type: object
+      properties:
+        id:
+          type: string
+        port:
+          type: number
+        status:
+          type: string
+          enum: [online, offline]
+        requestCount:
+          type: number
+      required:
+        - id
+        - port
+        - status
+        - requestCount
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        success:
+          type: boolean
+      required:
+        - message
+        - success
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+      required:
+        - error
+        - message

@@ -1,8 +1,20 @@
-# Workspace
+# Distributed Session Management System
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+A live demonstration of distributed session management across multiple Node.js backend servers using Redis as a centralized session store.
+
+## Architecture
+
+```
+Browser → Frontend (React/Vite) → /api → Backend Server (Express + Redis) → Session Storage
+```
+
+The backend simulates a distributed cluster with 3 nodes and a round-robin load balancer:
+
+```
+Client → Load Balancer (port 3000) → Node 1 (3001) / Node 2 (3002) / Node 3 (3003) → Redis
+```
 
 ## Stack
 
@@ -10,87 +22,76 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
+- **Frontend framework**: React + Vite + Tailwind CSS
 - **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
+- **Session store**: Redis + express-session + connect-redis
+- **Load balancing**: http-proxy (round-robin + sticky sessions)
 - **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
 
-## Structure
+## Project Structure
 
 ```text
 artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
+├── artifacts/
+│   ├── api-server/         # Express API server with session management
+│   │   ├── src/
+│   │   │   ├── index.ts        # Main entry (starts Redis + server)
+│   │   │   ├── start.ts        # Bootstrap script (starts Redis first)
+│   │   │   ├── app.ts          # Express app with session middleware
+│   │   │   ├── lib/
+│   │   │   │   ├── redis-client.ts    # Redis connection
+│   │   │   │   └── node-registry.ts  # Round-robin node simulation
+│   │   │   ├── middlewares/
+│   │   │   │   └── session.ts         # express-session + connect-redis
+│   │   │   └── routes/
+│   │   │       ├── auth.ts            # POST /api/auth/login, /logout
+│   │   │       └── session.ts         # GET /api/session/info, /nodes
+│   │   ├── start-nodes.sh      # Script to start all nodes
+│   │   └── stop-nodes.sh       # Script to stop all nodes
+│   └── session-demo/       # React frontend
+│       └── src/
+│           ├── pages/
+│           │   ├── home.tsx       # Architecture overview page
+│           │   ├── login.tsx      # Login form
+│           │   └── dashboard.tsx  # Session dashboard (protected)
+│           └── App.tsx            # Router
+├── lib/
+│   ├── api-spec/           # OpenAPI spec + codegen config
 │   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+│   ├── api-zod/            # Generated Zod schemas
+│   └── db/                 # Drizzle ORM (not used for sessions)
 ```
 
-## TypeScript & Composite Projects
+## Features Demonstrated
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+- **Distributed session storage** — Redis stores sessions accessible by any node
+- **Round-robin load balancing** — Each request routes to the next node
+- **Sticky session support** — lb_node cookie pins client to a node
+- **Failover handling** — Offline nodes are skipped automatically
+- **Session persistence** — Sessions survive server restarts (Redis backed)
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+## API Endpoints
 
-## Root Scripts
+- `POST /api/auth/login` — Create session (username/password)
+- `POST /api/auth/logout` — Destroy session
+- `GET /api/session/info` — Get current session + serving node
+- `GET /api/session/nodes` — Get all node statuses
+- `GET /api/healthz` — Health check
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+## Demo Credentials
 
-## Packages
+- `admin` / `password`
+- `user1` / `pass1`
+- `user2` / `pass2`
+- Any username with password `demo` also works
 
-### `artifacts/api-server` (`@workspace/api-server`)
+## Development
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+```bash
+# Start everything
+pnpm --filter @workspace/api-server run dev  # Starts Redis + API server
+pnpm --filter @workspace/session-demo run dev  # Starts Vite frontend
 
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
-
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+# Codegen (after changing OpenAPI spec)
+pnpm --filter @workspace/api-spec run codegen
+```

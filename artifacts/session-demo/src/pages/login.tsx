@@ -25,7 +25,7 @@ export default function Login() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: username.trim(), password: password.trim() }),
       });
 
       const data = await res.json();
@@ -89,7 +89,7 @@ export default function Login() {
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="admin"
                   className="w-full bg-background border border-input rounded-lg px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                  autoComplete="username"
+                  autoComplete="off"
                 />
               </div>
 

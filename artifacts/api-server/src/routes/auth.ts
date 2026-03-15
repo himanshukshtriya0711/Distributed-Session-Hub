@@ -10,15 +10,25 @@ const DEMO_USERS: Record<string, string> = {
 };
 
 router.post("/login", async (req: Request, res: Response) => {
-  const { username, password } = req.body as { username?: string; password?: string };
+  console.log("[LOGIN] body:", JSON.stringify(req.body));
+  console.log("[LOGIN] content-type:", req.headers["content-type"]);
+
+  const rawUsername = req.body?.username;
+  const rawPassword = req.body?.password;
+  const username = typeof rawUsername === "string" ? rawUsername.trim() : "";
+  const password = typeof rawPassword === "string" ? rawPassword.trim() : "";
+
+  console.log(`[LOGIN] username="${username}" password="${password}"`);
 
   if (!username || !password) {
     res.status(400).json({ error: "BadRequest", message: "Username and password are required" });
     return;
   }
 
-  const validPassword =
-    DEMO_USERS[username] === password || password === "demo";
+  const expectedPassword = DEMO_USERS[username];
+  const validPassword = expectedPassword === password || password === "demo";
+
+  console.log(`[LOGIN] expected="${expectedPassword}" valid=${validPassword}`);
 
   if (!validPassword) {
     res.status(401).json({ error: "Unauthorized", message: "Invalid credentials" });
@@ -34,11 +44,12 @@ router.post("/login", async (req: Request, res: Response) => {
 
   req.session.save((err) => {
     if (err) {
-      console.error("Session save error:", err);
+      console.error("[LOGIN] Session save error:", err);
       res.status(500).json({ error: "InternalError", message: "Session save failed" });
       return;
     }
 
+    console.log(`[LOGIN] Success: ${username} via ${node.id}`);
     res.json({
       success: true,
       username,
@@ -52,7 +63,7 @@ router.post("/login", async (req: Request, res: Response) => {
 router.post("/logout", (req: Request, res: Response) => {
   req.session.destroy((err) => {
     if (err) {
-      console.error("Session destroy error:", err);
+      console.error("[LOGOUT] Session destroy error:", err);
       res.status(500).json({ error: "InternalError", message: "Logout failed" });
       return;
     }
